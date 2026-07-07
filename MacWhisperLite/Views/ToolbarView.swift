@@ -52,7 +52,12 @@ struct ToolbarView: View {
             .disabled(viewModel.transcript.isEmpty)
 
             Spacer()
+     
+            ModelPickerView(
+                selectedModel: $viewModel.selectedModel
+            )
 
+            Spacer()
             if viewModel.isTranscribing {
 
                 ProgressView()

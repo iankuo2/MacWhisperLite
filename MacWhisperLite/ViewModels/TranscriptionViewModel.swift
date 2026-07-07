@@ -14,6 +14,7 @@ class TranscriptionViewModel: ObservableObject {
 
     @Published var transcript = ""
     @Published var isTranscribing = false
+    @Published var selectedModel: WhisperModel = .base
 
     private let whisper = WhisperService()
 
@@ -24,7 +25,8 @@ class TranscriptionViewModel: ObservableObject {
         do {
 
             transcript = try await whisper.transcribe(
-                audioURL: url
+                audioURL: url,
+                model: selectedModel
             )
 
         } catch {

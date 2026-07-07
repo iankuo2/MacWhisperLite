@@ -1,25 +1,21 @@
+//
+//  WhisperService.swift
+//  MacWhisperLite
+//
+
 import Foundation
 
 class WhisperService {
     
-    func transcribe(audioURL: URL) async throws -> String {
-        // 1. Secure Permission Step for Sandboxed Apps
-        // Required when files are imported via fileImporter panel sheets
-        guard audioURL.startAccessingSecurityScopedResource() else {
-            throw NSError(
-                domain: "Whisper",
-                code: 4,
-                userInfo: [NSLocalizedDescriptionKey: "Permission denied reading the source audio file path layout."]
-            )
-        }
-        // Ensure access token cleanly detaches once code execution block unmounts
+    func transcribe(audioURL: URL, model: WhisperModel) async throws -> String {
+        // Ensure access token cleanly detaches once execution finishes
         defer { audioURL.stopAccessingSecurityScopedResource() }
         
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let process = Process()
-                    // Path to whisper executable binary
+                    
                     guard let whisperPath = Bundle.main.path(forResource: "whisper-cli", ofType: nil) else {
                         throw NSError(
                             domain: "Whisper",
@@ -27,18 +23,46 @@ class WhisperService {
                             userInfo: [NSLocalizedDescriptionKey: "Cannot find whisper executable."]
                         )
                     }
-                    // Path to model
-                    guard let modelPath = Bundle.main.path(forResource: "ggml-base.en", ofType: "bin") else {
+                    //debug print everything in bundle
+                   // print(Bundle.main.bundlePath)
+                    
+                    
+                    //debug
+                    guard let modelPath = Bundle.main.path(
+                        forResource: model.filename,
+                        ofType: "bin",
+                        
+                    )
+                   /* print("========== Bundle ==========")
+
+                    let resourceURL = Bundle.main.resourceURL!
+
+                    let enumerator = FileManager.default.enumerator(
+                        at: resourceURL,
+                        includingPropertiesForKeys: nil
+                    )!
+
+                    for case let file as URL in enumerator {
+
+                        print(file.path)
+                    }
+
+                    print("============================")
+                    */
+                    else {
+
                         throw NSError(
                             domain: "Whisper",
                             code: 2,
-                            userInfo: [NSLocalizedDescriptionKey: "Cannot find model."]
+                            userInfo: [
+                                NSLocalizedDescriptionKey:
+                                "Cannot find \(model.displayName) model."
+                            ]
                         )
                     }
+               
                     process.executableURL = URL(fileURLWithPath: whisperPath)
                     
-                    // Optimization arguments for modern terminal deployments:
-                    // "-nt" outputs raw clean transcript text without timestamp fragments
                     process.arguments = [
                         "-m", modelPath,
                         "-f", audioURL.path(percentEncoded: false),
@@ -47,13 +71,11 @@ class WhisperService {
                     
                     let outputPipe = Pipe()
                     process.standardOutput = outputPipe
-                    // Crucial: Create error pipelines to debug underlying model exceptions
                     let errorPipe = Pipe()
                     process.standardError = errorPipe
                     
                     try process.run()
                     
-                    // FIX: Read pipeline bytes BEFORE waiting to avoid thread buffer deadlock freezes
                     let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
                     let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                     
@@ -69,14 +91,15 @@ class WhisperService {
                     }
                     
                     let result = String(data: data, encoding: .utf8) ?? ""
-                    
                     continuation.resume(returning: result.trimmingCharacters(in: .whitespacesAndNewlines))
+                
+            
                     
                 } catch {
                     continuation.resume(throwing: error)
                 }
+                
             }
         }
     }
 }
-
