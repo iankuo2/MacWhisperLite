@@ -49,43 +49,46 @@ struct DropZoneView: View {
                     )
                 )
         }
+        // DropZoneView.swift
+
+        // ... (Keep your layout code the same until the dropDestination modifier)
+
         .dropDestination(for: URL.self) { urls, location in
 
             guard let url = urls.first else {
                 return false
             }
 
-            Task {
+            // Explicitly gain sandboxed read permissions immediately during the drop action loop
+            guard url.startAccessingSecurityScopedResource() else {
+                return false
+            }
 
+            Task {
+                // Hand off the URL. ViewModel/Service will need to release it when done.
                 await viewModel.transcribe(url: url)
             }
 
             return true
 
         } isTargeted: { inside in
-
             isTargeted = inside
         }
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [
-                .audio
-            ]
+            allowedContentTypes: [.audio]
         ) { result in
-
             switch result {
-
             case .success(let url):
-
+                // Match the same logic: secure right away on selection
+                guard url.startAccessingSecurityScopedResource() else { return }
                 Task {
-
                     await viewModel.transcribe(url: url)
                 }
-
             case .failure:
-
                 break
             }
         }
+
     }
 }
