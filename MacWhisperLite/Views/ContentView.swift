@@ -4,7 +4,6 @@
 //
 //  Created by ian kuo on 2026-06-20.
 //
-
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -20,6 +19,7 @@ struct ContentView: View {
 
             Divider()
 
+            // If completely empty and idle, show drop zone
             if viewModel.transcript.isEmpty && !viewModel.isTranscribing {
 
                 Spacer()
@@ -30,17 +30,27 @@ struct ContentView: View {
 
             } else {
 
-                VStack(spacing: 12) {
-
-                    if viewModel.isTranscribing {
-
-                        ProgressView("Transcribing...")
-                            .padding()
-                    }
-
+                // Show the TextEditor immediately as text starts streaming
+                ZStack(alignment: .bottomTrailing) {
+                    
                     TextEditor(text: $viewModel.transcript)
                         .font(.body)
                         .padding()
+                    
+                    // A subtle, non-intrusive indicator in the corner instead of blocking the screen
+                    if viewModel.isTranscribing {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Streaming text...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(8)
+                        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                        .cornerRadius(6)
+                        .padding()
+                    }
                 }
             }
         }
@@ -48,6 +58,7 @@ struct ContentView: View {
                minHeight: 600)
     }
 }
+
 
 #Preview {
     ContentView()

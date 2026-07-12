@@ -146,5 +146,90 @@ import AVFoundation
         let frameCount = Int(outputBuffer.frameLength)
         return Array(UnsafeBufferPointer(start: floatData, count: frameCount))
     }
+     // MARK: - LiveStream method for Live Caption feature
+     // Add Streaming method inside  WhisperService actor
+     /*/Whisper performs best on live streams when you give it the entire audio chunk from the current sentence, rather than small 100ms fragments.
+      It accepts the full model parameter so it can auto-load the bundle model files ("ggml-tiny", "ggml-base", etc.) if needed:*/
+     func transcribeLiveStream(pcmBuffer: [Float], model: WhisperModel) async throws -> String {
+         // 1. Automatically load the model if it hasn't been loaded yet
+         guard let bundleModelPath = Bundle.main.path(forResource: model.filename, ofType: "bin") else {
+             throw WhisperError.modelNotFound
+         }
+         try ensureModelLoaded(atPath: bundleModelPath)
+         
+         // 2. Reuse your existing core logic to transcribe the rolling buffer window
+         return try await transcribe(pcmBuffer: pcmBuffer)
+     }
+     
+     // MARK: - Update WhisperService with a Segment Transcriber
+     //Helper method allows the ViewModel to request transcription for a specific slice of the file without loading the entire audio into RAM at once.
+     //Transcribes a specific time-slice of an audio file
+     func transcribeSegment(audioURL: URL, model: WhisperModel, startTime: TimeInterval, duration: TimeInterval) async throws -> String {
+         // 1. Locate and load model if needed
+         guard let bundleModelPath = Bundle.main.path(forResource: model.filename, ofType: "bin") else {
+             throw WhisperError.modelNotFound
+         }
+         try ensureModelLoaded(atPath: bundleModelPath)
+         
+         // 2. Load the audio file
+         let audioFile = try AVAudioFile(forReading: audioURL)
+         
+         guard let targetFormat = AVAudioFormat(
+             commonFormat: .pcmFormatFloat32,
+             sampleRate: 16000,
+             channels: 1,
+             interleaved: false
+         ) else { throw WhisperError.processingFailed }
+         
+         guard let converter = AVAudioConverter(from: audioFile.processingFormat, to: targetFormat) else {
+             throw WhisperError.processingFailed
+         }
+         
+         // 3. Calculate frame offsets for the segment
+         let sampleRate = audioFile.processingFormat.sampleRate
+         let startFrame = AVAudioFramePosition(startTime * sampleRate)
+         let frameCountToRead = AVAudioFrameCount(duration * sampleRate)
+         
+         // Ensure we don't read past the end of the file
+         let totalFrames = audioFile.length
+         guard startFrame < totalFrames else { return "" }
+         let safeFrameCount = min(frameCountToRead, AVAudioFrameCount(totalFrames - startFrame))
+         
+         audioFile.framePosition = startFrame
+         
+         guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: safeFrameCount) else {
+             throw WhisperError.processingFailed
+         }
+         try audioFile.read(into: inputBuffer, frameCount: safeFrameCount)
+         
+         // 4. Convert segment buffer to 16kHz
+         let capacityRatio = targetFormat.sampleRate / audioFile.processingFormat.sampleRate
+         let outputFrameCapacity = AVAudioFrameCount(Double(inputBuffer.frameLength) * capacityRatio)
+         
+         guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCapacity) else {
+             throw WhisperError.processingFailed
+         }
+         
+         var conversionError: NSError?
+         converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+             outStatus.pointee = .haveData
+             return inputBuffer
+         }
+         if let conversionError = conversionError { throw conversionError }
+         
+         // 5. Convert safe structured memory directly to primitive Swift elements
+         guard let floatData = outputBuffer.floatChannelData else {
+             throw WhisperError.processingFailed
+         }
+         let frameCount = Int(outputBuffer.frameLength)
+
+         // FIX: Pass the first channel pointer (floatData[0]) into the buffer initializer
+         let pcmSamples = Array(UnsafeBufferPointer(start: floatData[0], count: frameCount))
+
+         // 6. Run inference on this segment
+         return try await transcribe(pcmBuffer: pcmSamples)
+     }
+
+
 }
 
