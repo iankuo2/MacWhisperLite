@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 struct ToolbarView: View {
@@ -13,6 +14,9 @@ struct ToolbarView: View {
     @ObservedObject var viewModel: TranscriptionViewModel
 
     @State private var showingImporter = false
+    
+    // 1. Add environment property to the top of the view struct
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
 
@@ -76,7 +80,7 @@ struct ToolbarView: View {
 
                 Task {
 
-                    await viewModel.transcribe(url: url)
+                    await viewModel.transcribe(url: url, context: modelContext)
                 }
 
             case .failure:

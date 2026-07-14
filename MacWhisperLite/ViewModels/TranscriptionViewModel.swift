@@ -9,6 +9,7 @@
 import Foundation
 internal import Combine
 import AVFAudio
+import SwiftData
 
 @MainActor
 class TranscriptionViewModel: ObservableObject {
@@ -20,6 +21,7 @@ class TranscriptionViewModel: ObservableObject {
     @Published var isLiveRecording = false
     @Published var transcript = ""
     @Published var selectedModel: WhisperModel = .tiny
+    @Published var currentFileName: String = "Untitled Audio"
     
     init() {
         // Connect the manager callback to our UI text publisher
@@ -35,7 +37,7 @@ class TranscriptionViewModel: ObservableObject {
     
     // Existing static file transcriber
     // Update existing TranscriptionViewModel with 30 sec Segemented File Streaming
-    func transcribe(url: URL) async {
+    func transcribe(url: URL, context: ModelContext) async {
         isTranscribing = true
         transcript = "" // Clear canvas for live streaming updates
         
@@ -75,6 +77,8 @@ class TranscriptionViewModel: ObservableObject {
                 // Advance window time index forward
                 currentTime += segmentDuration
             }
+            // ✅ PLACE CALL 1: File transcription finished successfully
+            finalizeTranscription(context: context, url: url)
             
         } catch {
             transcript = "File transcription error: \(error.localizedDescription)"
@@ -85,10 +89,14 @@ class TranscriptionViewModel: ObservableObject {
 
     
     // New Live Streaming Transcriber controls
-    func toggleLiveRecording() {
+    func toggleLiveRecording(context: ModelContext) {
         if isLiveRecording {
             liveInputManager.stopStreaming()
             isLiveRecording = false
+            
+        // Live recording stopped, save the stream result
+    // Wrap in a tiny delay if  WhisperService handles trailing text buffers asynchronously
+            finalizeTranscription(context: context, url: nil)
         } else {
             transcript = "Listening..."
             isLiveRecording = true
@@ -100,4 +108,33 @@ class TranscriptionViewModel: ObservableObject {
             }
         }
     }
+    
+    // Call this function when a transcription successfully finishes
+       // Make url optional (URL?) to cleanly accommodate live recordings
+       func finalizeTranscription(context: ModelContext, url: URL?) {
+           guard !transcript.isEmpty else { return }
+           
+           // Extract filename from URL or generate a timestamped one for live input
+           if let fileURL = url {
+               self.currentFileName = fileURL.lastPathComponent
+           } else {
+               let timestamp = Date().formatted(date: .abbreviated, time: .shortened)
+               self.currentFileName = "Live Recording (\(timestamp))"
+           }
+           
+           // Create the record
+           let newRecord = TranscriptItem(
+               fileName: currentFileName,
+               text: transcript
+           )
+           
+           // Insert into database
+           context.insert(newRecord)
+           
+           do {
+               try context.save()
+           } catch {
+               print("Failed to save transcript: \(error.localizedDescription)")
+           }
+       }
 }

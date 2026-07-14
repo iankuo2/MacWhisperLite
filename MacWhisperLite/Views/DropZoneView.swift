@@ -4,6 +4,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import SwiftData
 
 struct DropZoneView: View {
 
@@ -13,6 +14,8 @@ struct DropZoneView: View {
 
     @State private var showingImporter = false
 
+    // 1. Add environment property to the top of the view struct
+    @Environment(\.modelContext) private var modelContext
     var body: some View {
 
         VStack(spacing: 20) {
@@ -36,19 +39,20 @@ struct DropZoneView: View {
         }
         .frame(width: 500,
                height: 250)
-        .background(.quaternary)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay {
+        // REPLACED: Applied new subtle card background & responsive border
+                .background {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(.quaternary)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                // Use AnyShapeStyle to allow mixing Color and SeparatorShapeStyle
+                                .strokeBorder(
+                                    isTargeted ? AnyShapeStyle(.blue) : AnyShapeStyle(.separator),
+                                    lineWidth: isTargeted ? 2 : 1
+                                )
+                        )
 
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(
-                    isTargeted ? .blue : .gray,
-                    style: StrokeStyle(
-                        lineWidth: 3,
-                        dash: [10]
-                    )
-                )
-        }
+                }
         // DropZoneView.swift
 
         // ... (Keep your layout code the same until the dropDestination modifier)
@@ -66,7 +70,7 @@ struct DropZoneView: View {
 
             Task {
                 // Hand off the URL. ViewModel/Service will need to release it when done.
-                await viewModel.transcribe(url: url)
+                await viewModel.transcribe(url: url, context: modelContext)
             }
 
             return true
@@ -83,7 +87,7 @@ struct DropZoneView: View {
                 // Match the same logic: secure right away on selection
                 guard url.startAccessingSecurityScopedResource() else { return }
                 Task {
-                    await viewModel.transcribe(url: url)
+                    await viewModel.transcribe(url: url, context: modelContext)
                 }
             case .failure:
                 break
