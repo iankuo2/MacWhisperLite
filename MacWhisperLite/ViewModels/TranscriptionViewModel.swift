@@ -5,7 +5,6 @@
 //  Modified by ian kuo on 2026-07-11
 //
 
-
 import Foundation
 internal import Combine
 import AVFAudio
@@ -23,6 +22,13 @@ class TranscriptionViewModel: ObservableObject {
     @Published var selectedModel: WhisperModel = .tiny
     @Published var currentFileName: String = "Untitled Audio"
     
+    // 1. Give your selectedDevice a safe default type or value matching your setup
+    @Published var selectedDevice: LiveAudioSource = .microphone
+    
+    // 2. Alert properties for the SwiftUI layer to observe hardware failures
+    @Published var alertMessage: String? = nil
+    @Published var showAlert = false
+    
     init() {
         // Connect the manager callback to our UI text publisher
         liveInputManager.onTextReceived = { [weak self] liveText in
@@ -36,7 +42,6 @@ class TranscriptionViewModel: ObservableObject {
     }
     
     // Existing static file transcriber
-    // Update existing TranscriptionViewModel with 30 sec Segemented File Streaming
     func transcribe(url: URL, context: ModelContext) async {
         isTranscribing = true
         transcript = "" // Clear canvas for live streaming updates
@@ -51,11 +56,9 @@ class TranscriptionViewModel: ObservableObject {
             var currentTime: TimeInterval = 0.0
             
             while currentTime < totalDuration {
-                // Calculate how much time is left in the file
                 let remainingTime = totalDuration - currentTime
                 let currentChunkDuration = min(segmentDuration, remainingTime)
                 
-                // Transcribe just this slice
                 let segmentText = try await whisper.transcribeSegment(
                     audioURL: url,
                     model: selectedModel,
@@ -66,7 +69,6 @@ class TranscriptionViewModel: ObservableObject {
                 let cleanedSegment = segmentText.trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 if !cleanedSegment.isEmpty {
-                    // Stream text directly to the UI view model string state
                     if transcript.isEmpty {
                         transcript = cleanedSegment
                     } else {
@@ -74,10 +76,8 @@ class TranscriptionViewModel: ObservableObject {
                     }
                 }
                 
-                // Advance window time index forward
                 currentTime += segmentDuration
             }
-            // ✅ PLACE CALL 1: File transcription finished successfully
             finalizeTranscription(context: context, url: url)
             
         } catch {
@@ -87,21 +87,30 @@ class TranscriptionViewModel: ObservableObject {
         isTranscribing = false
     }
 
-    
     // New Live Streaming Transcriber controls
     func toggleLiveRecording(context: ModelContext) {
         if isLiveRecording {
             liveInputManager.stopStreaming()
             isLiveRecording = false
-            
-        // Live recording stopped, save the stream result
-    // Wrap in a tiny delay if  WhisperService handles trailing text buffers asynchronously
             finalizeTranscription(context: context, url: nil)
         } else {
+            // 3. Hardware check before activating stream
+            let status = AudioDeviceDetector.checkAudioInputStatus()
+            
+            if !status.hasInputDevice {
+                // Trigger the alert instead of locking up or failing silently
+                self.alertMessage = "No microphone detected. Please plug in or enable an audio input device to use Live Captions."
+                self.showAlert = true
+                return
+            }
+            
+            // Optional: Log what kind of microphone we are using
+            print("Starting live captioning with: \(status.deviceName ?? "Unknown Device") (External: \(status.isExternal))")
+            
             transcript = "Listening..."
             isLiveRecording = true
             do {
-                try liveInputManager.startStreaming(withModel: selectedModel)
+                try liveInputManager.startStreaming(withModel: selectedModel, source: selectedDevice)
             } catch {
                 transcript = "Microphone access failed: \(error.localizedDescription)"
                 isLiveRecording = false
@@ -110,31 +119,27 @@ class TranscriptionViewModel: ObservableObject {
     }
     
     // Call this function when a transcription successfully finishes
-       // Make url optional (URL?) to cleanly accommodate live recordings
-       func finalizeTranscription(context: ModelContext, url: URL?) {
-           guard !transcript.isEmpty else { return }
-           
-           // Extract filename from URL or generate a timestamped one for live input
-           if let fileURL = url {
-               self.currentFileName = fileURL.lastPathComponent
-           } else {
-               let timestamp = Date().formatted(date: .abbreviated, time: .shortened)
-               self.currentFileName = "Live Recording (\(timestamp))"
-           }
-           
-           // Create the record
-           let newRecord = TranscriptItem(
-               fileName: currentFileName,
-               text: transcript
-           )
-           
-           // Insert into database
-           context.insert(newRecord)
-           
-           do {
-               try context.save()
-           } catch {
-               print("Failed to save transcript: \(error.localizedDescription)")
-           }
-       }
+    func finalizeTranscription(context: ModelContext, url: URL?) {
+        guard !transcript.isEmpty else { return }
+        
+        if let fileURL = url {
+            self.currentFileName = fileURL.lastPathComponent
+        } else {
+            let timestamp = Date().formatted(date: .abbreviated, time: .shortened)
+            self.currentFileName = "Live Recording (\(timestamp))"
+        }
+        
+        let newRecord = TranscriptItem(
+            fileName: currentFileName,
+            text: transcript
+        )
+        
+        context.insert(newRecord)
+        
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save transcript: \(error.localizedDescription)")
+        }
+    }
 }

@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 
 enum SidebarSelection: Hashable {
     case newTranscription
+    case liveCaptions // 1. Added liveCaptions case
     case history
     case settings
 }
@@ -29,6 +30,10 @@ struct ContentView: View {
             List(selection: $selectedTab) {
                 NavigationLink(value: SidebarSelection.newTranscription) {
                     Label("Home", systemImage: "house")
+                }
+                // 2. Added navigation item for Live Captions
+                NavigationLink(value: SidebarSelection.liveCaptions) {
+                    Label("Live Captions", systemImage: "captions.bubble")
                 }
                 NavigationLink(value: SidebarSelection.history) {
                     Label("History", systemImage: "clock")
@@ -69,7 +74,7 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
                 
             default:
-                // Hide or empty the middle column for other tabs
+                // Hide or empty the middle column for other tabs (including liveCaptions)
                 Text("")
                     .navigationSplitViewColumnWidth(0)
             }
@@ -79,6 +84,10 @@ struct ContentView: View {
             switch selectedTab {
             case .newTranscription, .none:
                 transcriptionWorkspace
+                
+            case .liveCaptions:
+                // 3. Render your Live Captions feature here
+                liveCaptionsWorkspace
                 
             case .history:
                 if let item = selectedHistoryItem {
@@ -128,6 +137,14 @@ struct ContentView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - 4. Extracted Live Captions View
+    private var liveCaptionsWorkspace: some View {
+        // Swap LiveCaptionsView() out with whatever your actual live captioning component/view is named
+        LiveCaptionsView(viewModel: viewModel)
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Extracted History Detail View
