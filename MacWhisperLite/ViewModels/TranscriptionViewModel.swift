@@ -9,6 +9,7 @@ import Foundation
 internal import Combine
 import AVFAudio
 import SwiftData
+import AVFoundation
 
 @MainActor
 class TranscriptionViewModel: ObservableObject {
@@ -21,23 +22,58 @@ class TranscriptionViewModel: ObservableObject {
     @Published var transcript = ""
     @Published var selectedModel: WhisperModel = .tiny
     @Published var currentFileName: String = "Untitled Audio"
-    
-    // 1. Give your selectedDevice a safe default type or value matching your setup
     @Published var selectedDevice: LiveAudioSource = .microphone
     
-    // 2. Alert properties for the SwiftUI layer to observe hardware failures
     @Published var alertMessage: String? = nil
     @Published var showAlert = false
     
+    // Track whether a microphone is physically available right now
+    @Published var hasMicrophoneConnected: Bool = false
+    @Published var activeMicrophoneName: String = "No Microphone"
+    
+    private var cancellables = Set<AnyCancellable>()
+    
     init() {
+        // Run an initial hardware check when the app launches
+        refreshAudioHardware()
+        
         // Connect the manager callback to our UI text publisher
         liveInputManager.onTextReceived = { [weak self] liveText in
             guard let self = self else { return }
-            // Filter out internal whisper noise artifacts like " [BLANK_AUDIO] " or empty strings
             let cleanedText = liveText.trimmingCharacters(in: .whitespacesAndNewlines)
             if !cleanedText.isEmpty {
                 self.transcript = cleanedText
             }
+        }
+        
+        // 🚨 LISTEN TO HARDWARE PLUG/UNPLUG EVENTS
+        NotificationCenter.default.publisher(for: AVCaptureDevice.wasConnectedNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshAudioHardware()
+            }
+            .store(in: &cancellables)
+            
+        NotificationCenter.default.publisher(for: AVCaptureDevice.wasDisconnectedNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshAudioHardware()
+            }
+            .store(in: &cancellables)
+    }
+    
+    /// Re-evaluates connected devices and updates published states for SwiftUI
+    func refreshAudioHardware() {
+        let status = AudioDeviceDetector.checkAudioInputStatus()
+        self.hasMicrophoneConnected = status.hasInputDevice
+        self.activeMicrophoneName = status.deviceName ?? "No Microphone"
+        
+        // If the mic was unplugged while we were recording, clean up gracefully
+        if !status.hasInputDevice && isLiveRecording {
+            liveInputManager.stopStreaming()
+            isLiveRecording = false
+            alertMessage = "Your microphone was unplugged. Live captioning has stopped."
+            showAlert = true
         }
     }
     
@@ -87,36 +123,32 @@ class TranscriptionViewModel: ObservableObject {
         isTranscribing = false
     }
 
-    // New Live Streaming Transcriber controls
-    func toggleLiveRecording(context: ModelContext) {
-        if isLiveRecording {
-            liveInputManager.stopStreaming()
-            isLiveRecording = false
-            finalizeTranscription(context: context, url: nil)
-        } else {
-            // 3. Hardware check before activating stream
-            let status = AudioDeviceDetector.checkAudioInputStatus()
-            
-            if !status.hasInputDevice {
-                // Trigger the alert instead of locking up or failing silently
-                self.alertMessage = "No microphone detected. Please plug in or enable an audio input device to use Live Captions."
-                self.showAlert = true
-                return
-            }
-            
-            // Optional: Log what kind of microphone we are using
-            print("Starting live captioning with: \(status.deviceName ?? "Unknown Device") (External: \(status.isExternal))")
-            
-            transcript = "Listening..."
-            isLiveRecording = true
-            do {
-                try liveInputManager.startStreaming(withModel: selectedModel, source: selectedDevice)
-            } catch {
-                transcript = "Microphone access failed: \(error.localizedDescription)"
+    // Modified toggle incorporating the dynamic property
+        func toggleLiveRecording(context: ModelContext) {
+            if isLiveRecording {
+                liveInputManager.stopStreaming()
                 isLiveRecording = false
-            }
-        }
-    }
+                finalizeTranscription(context: context, url: nil)
+            } else {
+                // Re-verify immediately prior to starting stream
+                refreshAudioHardware()
+                
+                if !hasMicrophoneConnected {
+                    self.alertMessage = "No microphone detected. Please plug in an audio input device to use Live Captions."
+                    self.showAlert = true
+                    return
+                }
+            
+                transcript = "Listening..."
+                            isLiveRecording = true
+                            do {
+                                try liveInputManager.startStreaming(withModel: selectedModel, source: selectedDevice)
+                            } catch {
+                                transcript = "Microphone access failed: \(error.localizedDescription)"
+                                isLiveRecording = false
+                            }
+                        }
+                    }
     
     // Call this function when a transcription successfully finishes
     func finalizeTranscription(context: ModelContext, url: URL?) {

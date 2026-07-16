@@ -18,44 +18,19 @@ struct DropZoneView: View {
     @Environment(\.modelContext) private var modelContext
     var body: some View {
 
-        VStack(spacing: 20) {
+        VStack() {
 
-            Image(systemName: "waveform")
-                .font(.system(size: 64))
-                .foregroundStyle(.blue)
-
-            Text("Drop audio files here")
-                .font(.title2)
-
-            Text("or click Open")
-                .foregroundStyle(.secondary)
-
-            Button("Open") {
-
-                showingImporter = true
-            }
-            .buttonStyle(.borderedProminent)
-
+           
         }
-        .frame(width: 500,
-               height: 250)
-        // REPLACED: Applied new subtle card background & responsive border
-                .background {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(.quaternary)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                // Use AnyShapeStyle to allow mixing Color and SeparatorShapeStyle
-                                .strokeBorder(
-                                    isTargeted ? AnyShapeStyle(.blue) : AnyShapeStyle(.separator),
-                                    lineWidth: isTargeted ? 2 : 1
-                                )
-                        )
-
-                }
-        // DropZoneView.swift
-
-        // ... (Keep your layout code the same until the dropDestination modifier)
+        // A transparent view that expands to fill all available space in the parent container
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Overlay a thin border around the edge that only highlights blue when a drag hover is active
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.blue, lineWidth: 3)
+                    )
+                    .padding(16) // Generates a clean margin between the window edge and the highlighted border
 
         .dropDestination(for: URL.self) { urls, location in
 

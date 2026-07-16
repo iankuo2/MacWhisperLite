@@ -86,7 +86,7 @@ struct LiveCaptionsView: View {
                             viewModel.selectedDevice = .microphone
                         } label: {
                             HStack {
-                                Text(detectedMicName)
+                                Text(viewModel.activeMicrophoneName)
                                 if viewModel.selectedDevice == .microphone {
                                     Image(systemName: "checkmark")
                                 }
@@ -95,18 +95,15 @@ struct LiveCaptionsView: View {
                     }
                     
                     Button {
-                        // Bind this to your specific system/loopback audio wrapper enum if available
-                        // viewModel.selectedDevice = .systemAudio 
+                        // viewModel.selectedDevice = .systemAudio
                     } label: {
-                        HStack {
-                            Text("All System Audio")
-                            // Add checkmark toggle logic if your model tracks it
-                        }
+                        Text("All System Audio")
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "waveform.and.mic")
-                        Text(detectedMicName)
+                        Image(systemName: viewModel.hasMicrophoneConnected ? "waveform.and.mic" : "mic.slash")
+                            .foregroundColor(viewModel.hasMicrophoneConnected ? .primary : .red)
+                        Text(viewModel.activeMicrophoneName)
                         Image(systemName: "chevron.down")
                             .font(.caption2)
                             .foregroundColor(.secondary)
