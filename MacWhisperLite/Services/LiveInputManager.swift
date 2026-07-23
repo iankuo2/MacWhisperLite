@@ -1,7 +1,10 @@
-/*
- Refactor LiveInputManager to support both paths
-Now update your LiveInputManager to accept a LiveAudioSource parameter and route the incoming buffer processing into a shared utility function.
-*/
+//
+//  LiveInputManager.swift
+//  MacWhisperLite
+//
+//  Created by ian kuo on 2026-07-22.
+//
+
 import Foundation
 import AVFoundation
 
@@ -12,8 +15,8 @@ enum LiveAudioSource {
 
 class LiveInputManager {
     private let audioEngine = AVAudioEngine()
-    private let whisperService: WhisperService
-    private let systemAudioCapture = SystemAudioCaptureManager() // Added SCKit Manager
+    private var engine: any TranscriptionEngine
+    private let systemAudioCapture = SystemAudioCaptureManager()
     
     private var rollingAudioBuffer: [Float] = []
     private var isProcessing = false
@@ -21,12 +24,19 @@ class LiveInputManager {
     
     var onTextReceived: (@MainActor (String) -> Void)?
     
-    init(whisperService: WhisperService) {
-        self.whisperService = whisperService
+    // MARK: - Initializer & Engine Management
+    init(engine: any TranscriptionEngine) {
+        self.engine = engine
     }
     
+    /// Updates the underlying engine when the user switches backends
+    func updateEngine(_ engine: any TranscriptionEngine) {
+        self.engine = engine
+    }
+    
+    // MARK: - Streaming Controls
     @MainActor
-    func startStreaming(withModel model: WhisperModel, source: LiveAudioSource) throws {
+    func startStreaming(source: LiveAudioSource) throws {
         rollingAudioBuffer.removeAll()
         self.activeSource = source
         
@@ -56,7 +66,7 @@ class LiveInputManager {
                 let newSamples = Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
                 
                 // Route samples to central processing pipeline
-                self.processNewSamples(newSamples, model: model)
+                self.processNewSamples(newSamples)
             }
             try audioEngine.start()
             
@@ -64,7 +74,7 @@ class LiveInputManager {
             // --- SOURCE B: SYSTEM AUDIO ---
             systemAudioCapture.onSamplesCaptured = { [weak self] newSamples in
                 guard let self = self else { return }
-                self.processNewSamples(newSamples, model: model)
+                self.processNewSamples(newSamples)
             }
             
             Task {
@@ -77,8 +87,8 @@ class LiveInputManager {
         }
     }
     
-    /// Centralized parsing & transcription orchestration
-    private func processNewSamples(_ samples: [Float], model: WhisperModel) {
+    /// Centralized parsing & transcription orchestration via TranscriptionEngine Actor
+    private func processNewSamples(_ samples: [Float]) {
         let currentSnapshot = synchronizedAppendAndGetSnapshot(with: samples)
         
         guard !getIsProcessing() else { return }
@@ -87,10 +97,8 @@ class LiveInputManager {
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self = self else { return }
             do {
-                let liveText = try await self.whisperService.transcribeLiveStream(
-                    pcmBuffer: currentSnapshot,
-                    model: model
-                )
+                // Call the actor method directly on whatever TranscriptionEngine is active
+                let liveText = try await self.engine.transcribe(pcmBuffer: currentSnapshot)
                 
                 await MainActor.run {
                     self.onTextReceived?(liveText)
@@ -118,11 +126,15 @@ class LiveInputManager {
     
     @MainActor func flushBuffer() { clearBuffer() }
     
-    // --- Thread Safe State Helpers Remain Unchanged ---
+    // MARK: - Thread Safe State Helpers
     private let queue = DispatchQueue(label: "com.whisper.live.buffer.sync")
-    private func synchronizedAppendAndGetSnapshot(with samples: [Float]) -> [Float] { queue.sync { self.rollingAudioBuffer.append(contentsOf: samples); return self.rollingAudioBuffer } }
+    private func synchronizedAppendAndGetSnapshot(with samples: [Float]) -> [Float] {
+        queue.sync {
+            self.rollingAudioBuffer.append(contentsOf: samples)
+            return self.rollingAudioBuffer
+        }
+    }
     private func clearBuffer() { queue.sync { self.rollingAudioBuffer.removeAll() } }
     private func getIsProcessing() -> Bool { queue.sync { self.isProcessing } }
     private func setIsProcessing(_ value: Bool) { queue.sync { self.isProcessing = value } }
 }
-

@@ -77,7 +77,9 @@ struct ToolbarView: View {
             Spacer()
      
             ModelPickerView(
-                selectedModel: $viewModel.selectedModel
+                selectedEngine: $viewModel.selectedEngineType,
+                selectedModel: $viewModel.selectedModel,
+                isDisabled: viewModel.isTranscribing || viewModel.isLiveRecording
             )
 
             Spacer()
