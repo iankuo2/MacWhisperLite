@@ -25,11 +25,11 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         switch engineType {
         case .whisperKit:
             switch self {
-            case .small:
-                return "openai_whisper-small"
-            default:
-                // Defaults to large-v3 turbo for all other cases (tiny, base, medium, large)
+            case .large:
                 return "openai_whisper-large-v3-v20240930_turbo"
+            default:
+                // Defaults to the 626MB quantized model for all other cases (tiny, base, small, medium)
+                return "openai_whisper-large-v3-v20240930_626MB"
             }
             
         case .whisperCpp:
@@ -78,22 +78,22 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .medium:
             return "High Accuracy"
         case .large:
-            return "Best Accuracy"
+            return "Best Accuracy (Turbo)"
         }
     }
 
     var memoryRequirement: String {
         switch self {
         case .tiny:
-            return "≈75 MB"
+            return "≈626 MB"
         case .base:
-            return "≈150 MB"
+            return "≈626 MB"
         case .small:
-            return "≈500 MB"
+            return "≈626 MB"
         case .medium:
-            return "≈1.5 GB"
+            return "≈626 MB"
         case .large:
-            return "≈3 GB"
+            return "≈1.5 GB"
         }
     }
 }

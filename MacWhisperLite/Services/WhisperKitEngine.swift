@@ -69,6 +69,14 @@ actor WhisperKitEngine: TranscriptionEngine {
         //loads from main bundle for offline use ~1.6GB memory
     func loadModel(_ model: WhisperModel) async throws {
         let targetModelName = await model.modelName(for: .whisperKit)
+print("📦 Main Bundle Path:\n\(Bundle.main.bundlePath)")
+        
+ if let path = Bundle.main.path(forResource: "openai_whisper-large-v3-v20240930_turbo", ofType: nil) {
+            print("✅ Successfully found model in Main Bundle at: \(path)")
+  } else {
+            print("❌ Model directory NOT found in Main Bundle root.")
+ }
+        
         
         // Locate model folder inside App Bundle
         guard let bundledFolderURL = Bundle.main.url(forResource: targetModelName, withExtension: nil) else {
