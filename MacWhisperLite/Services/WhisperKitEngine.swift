@@ -137,12 +137,21 @@ print("📦 Main Bundle Path:\n\(Bundle.main.bundlePath)")
             )
         }
         
-        // Pass start and end timestamps as [Float]
-        let options = DecodingOptions(
-            clipTimestamps: [Float(startTime), Float(startTime + duration)]
-        )
+        var options = DecodingOptions()
+        
+        // 1. Force task to transcribe (prevent English translation)
+        options.task = .transcribe
+        
+        
+        // 2. Enable automatic language detection with prefill prompt
+        options.detectLanguage = true
+        options.usePrefillPrompt = true
+        
+        // FIX: Modify the property directly instead of overwriting the object
+        options.clipTimestamps = [Float(startTime), Float(startTime + duration)]
         
         let results = try await kit.transcribe(audioPath: audioURL.path, decodeOptions: options)
         return results.first?.text ?? ""
     }
+
 }
