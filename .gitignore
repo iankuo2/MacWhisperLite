@@ -9,3 +9,15 @@ MacWhisperLite.xcodeproj/xcuserdata/iankuo.xcuserdatad/xcdebugger/
 MacWhisperLite.xcodeproj/
 
 MacWhisperLite/Resources/Models/
+
+DerivedData/
+
+openai_whisper-large-v3-v20240930_626MB/
+
+MacWhisperLite/Assets.xcassets/
+
+MacWhisperLiteTests/ggml-base.bin
+
+config.json
+
+generation_config.json
