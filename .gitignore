@@ -10,14 +10,16 @@ MacWhisperLite.xcodeproj/
 
 MacWhisperLite/Resources/Models/
 
-DerivedData/
-
-openai_whisper-large-v3-v20240930_626MB/
-
-MacWhisperLite/Assets.xcassets/
-
 MacWhisperLiteTests/ggml-base.bin
-
-config.json
-
+AudioEncoder.mlmodelc/weights/weight.bin
+DerivedData/
+openai_whisper-large-v3-v20240930_turbo/
+MelSpectrogram.mlmodelc/
+TextDecoder.mlmodelc/
+TextDecoderContextPrefill.mlmodelc/
+AudioEncoder.mlmodelc/
 generation_config.json
+config.json
+MacWhisperLite/Assets.xcassets/AppIcon.appiconset/
+openai_whisper-large-v3-v20240930_626MB/
+MacWhisperLiteTests/
