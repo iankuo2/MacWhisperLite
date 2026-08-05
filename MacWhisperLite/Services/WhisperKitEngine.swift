@@ -22,56 +22,13 @@ actor WhisperKitEngine: TranscriptionEngine {
     
     /// Tracks download progress (0.0 to 1.0)
         @MainActor var downloadProgress: Double = 0.0
-   /*
-    
-    // this method downloads the whisperKit model from internet but buggy
-        func loadModel(_ model: WhisperModel) async throws {
-            let modelName = await model.modelName(for: .whisperKit) // "openai_whisper-large-v3-v20240930_turbo"
-            
-            // Return early if this exact model is already initialized and ready
-            if let kit = whisperKit, currentModel == model, kit.modelState == .loaded {
-                return
-            }
-            
-            print("📥 Preparing WhisperKit model: \(modelName)...")
-            
-            // Step 1: Explicitly download the model folder from Hugging Face
-            let modelFolder = try await WhisperKit.download(
-                variant: modelName,
-                downloadBase: nil, // Uses default Application Support directory
-                
-                progressCallback: { [weak self] progress in
-                    Task { [weak self] in
-                        await self?.updateProgress(progress.fractionCompleted)
-                    }
-                }
-            )
-            
-            print("✅ Download/Check complete. Initializing CoreML context from: \(modelFolder.path)")
-            
-            // Step 2: Initialize WhisperKit directly from the verified local folder
-            let kit = try await WhisperKit(modelFolder: modelFolder.path)
-            
-            // Step 3: Verify context state
-            guard kit.modelState == .loaded else {
-                throw NSError(
-                    domain: "WhisperKitEngine",
-                    code: -1001,
-                    userInfo: [NSLocalizedDescriptionKey: "WhisperKit downloaded successfully, but CoreML initialization failed."]
-                )
-            }
-            
-            self.whisperKit = kit
-            self.currentModel = model
-            print("🚀 WhisperKit context successfully initialized!")
-        }
-    */
+   
         //loads from main bundle for offline use ~1.6GB memory
     func loadModel(_ model: WhisperModel) async throws {
         let targetModelName = await model.modelName(for: .whisperKit)
 print("📦 Main Bundle Path:\n\(Bundle.main.bundlePath)")
         
- if let path = Bundle.main.path(forResource: "openai_whisper-large-v3-v20240930_turbo", ofType: nil) {
+ if let path = Bundle.main.path(forResource: "openai_whisper-large-v3-v20240930_626MB", ofType: nil) {
             print("✅ Successfully found model in Main Bundle at: \(path)")
   } else {
             print("❌ Model directory NOT found in Main Bundle root.")
