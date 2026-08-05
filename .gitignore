@@ -22,4 +22,12 @@ generation_config.json
 config.json
 MacWhisperLite/Assets.xcassets/AppIcon.appiconset/
 openai_whisper-large-v3-v20240930_626MB/
-MacWhisperLiteTests/
+
+
+MacWhisperLiteTests/AudioDecoder.h
+
+MacWhisperLiteTests/AudioDecoder.m
+
+MacWhisperLiteTests/jfk.mp3
+
+MacWhisperLiteTests/MacWhisperLiteTests-Bridging-Header.h
