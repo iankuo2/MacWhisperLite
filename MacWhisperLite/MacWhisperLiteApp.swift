@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct MacWhisperLiteApp: App {
@@ -13,5 +14,7 @@ struct MacWhisperLiteApp: App {
         WindowGroup {
             ContentView()
         }
+        // injects the SwiftData storage into the environment
+        .modelContainer(for: TranscriptItem.self)
     }
 }

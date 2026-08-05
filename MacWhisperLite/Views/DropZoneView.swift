@@ -4,6 +4,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import SwiftData
 
 struct DropZoneView: View {
 
@@ -13,45 +14,23 @@ struct DropZoneView: View {
 
     @State private var showingImporter = false
 
+    // 1. Add environment property to the top of the view struct
+    @Environment(\.modelContext) private var modelContext
     var body: some View {
 
-        VStack(spacing: 20) {
+        VStack() {
 
-            Image(systemName: "waveform")
-                .font(.system(size: 64))
-                .foregroundStyle(.blue)
-
-            Text("Drop audio files here")
-                .font(.title2)
-
-            Text("or click Open")
-                .foregroundStyle(.secondary)
-
-            Button("Open") {
-
-                showingImporter = true
-            }
-            .buttonStyle(.borderedProminent)
-
+           
         }
-        .frame(width: 500,
-               height: 250)
-        .background(.quaternary)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay {
-
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(
-                    isTargeted ? .blue : .gray,
-                    style: StrokeStyle(
-                        lineWidth: 3,
-                        dash: [10]
+        // A transparent view that expands to fill all available space in the parent container
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Overlay a thin border around the edge that only highlights blue when a drag hover is active
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.blue, lineWidth: 3)
                     )
-                )
-        }
-        // DropZoneView.swift
-
-        // ... (Keep your layout code the same until the dropDestination modifier)
+                    .padding(16) // Generates a clean margin between the window edge and the highlighted border
 
         .dropDestination(for: URL.self) { urls, location in
 
@@ -66,7 +45,7 @@ struct DropZoneView: View {
 
             Task {
                 // Hand off the URL. ViewModel/Service will need to release it when done.
-                await viewModel.transcribe(url: url)
+                await viewModel.transcribe(url: url, context: modelContext)
             }
 
             return true
@@ -83,7 +62,7 @@ struct DropZoneView: View {
                 // Match the same logic: secure right away on selection
                 guard url.startAccessingSecurityScopedResource() else { return }
                 Task {
-                    await viewModel.transcribe(url: url)
+                    await viewModel.transcribe(url: url, context: modelContext)
                 }
             case .failure:
                 break
