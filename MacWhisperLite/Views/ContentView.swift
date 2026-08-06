@@ -17,6 +17,7 @@ enum SidebarSelection: Hashable {
 
 struct ContentView: View {
     @StateObject private var viewModel = TranscriptionViewModel()
+    @StateObject private var aiService = AIChatService()
 
     // Track the universal selection state for the entire sidebar list
     @State private var selectedTab: SidebarSelection? = .newTranscription
@@ -26,15 +27,17 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var isDraggingFile = false
     
+    // Store AI refined output locally for active sessions
+    @State private var refinedTranscript: String = ""
+    @State private var showingRefinedView: Bool = false
+    
     var body: some View {
         NavigationSplitView {
             // MARK: - Column 1: Sidebar
-            // 🚨 Binding selection here ensures the blue highlighting follows user clicks instantly
             List(selection: Binding(
                 get: { self.selectedTab },
                 set: { newValue in
                     self.selectedTab = newValue
-                    // 🚨 Intercept sidebar clicks to clear out old active states cleanly
                     if newValue == .newTranscription || newValue == .liveCaptions {
                         prepareForNewView()
                     }
@@ -70,7 +73,6 @@ struct ContentView: View {
                             }
                             .contextMenu {
                                 Button(role: .destructive) {
-                                     // If we delete the currently viewed item, revert selection to home
                                     if case .historyItem(let selectedItem) = selectedTab, selectedItem == item {
                                         selectedTab = .newTranscription
                                         prepareForNewView()
@@ -128,7 +130,6 @@ struct ContentView: View {
                 guard let droppedURL = urls.first else { return false }
                 guard droppedURL.startAccessingSecurityScopedResource() else { return false }
                 
-                // Clear state ready for the fresh file drop import
                 prepareForNewView()
                 selectedTab = .newTranscription
                 
@@ -165,19 +166,56 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Extracted Transcription View (Update inside ContentView.swift)
+    // MARK: - Extracted Transcription View
     private func transcriptionWorkspace(historicalItem: TranscriptItem?) -> some View {
-        // 🚨 1. Determine what text and file name are currently active
         let currentText = historicalItem?.text ?? viewModel.transcript
         let currentFileName = historicalItem?.fileName ?? "Untitled Transcription"
         
+        // Button condition: Only show if NOT transcribing AND there is valid text
+        let canRefineWithAI = !viewModel.isTranscribing && !currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        
         return VStack(spacing: 0) {
-            // 🚨 2. Pass the computed active strings straight into the toolbar structure
-            ToolbarView(
-                viewModel: viewModel,
-                activeTranscriptText: currentText,
-                activeFileName: currentFileName
-            )
+            // Header Bar containing Toolbar and AI Refine trigger button
+            HStack {
+                ToolbarView(
+                    viewModel: viewModel,
+                    activeTranscriptText: currentText,
+                    activeFileName: currentFileName
+                )
+                
+                Spacer()
+                
+                // MARK: - AI Refine Button
+                if canRefineWithAI {
+                    Button {
+                        Task {
+                            let result = await aiService.processTranscript(currentText)
+                            if !result.isEmpty {
+                                self.refinedTranscript = result
+                                self.showingRefinedView = true
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if aiService.isProcessing {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Refining...")
+                            } else {
+                                Image(systemName: "sparkles")
+                                Text("AI Clean Up")
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .disabled(aiService.isProcessing)
+                    .padding(.trailing, 12)
+                }
+            }
+            
             Divider()
             
             if let item = historicalItem {
@@ -188,9 +226,34 @@ struct ContentView: View {
                 }
             } else {
                 ZStack(alignment: .bottomTrailing) {
-                    TextEditor(text: $viewModel.transcript)
-                        .font(.body)
-                        .padding()
+                    if showingRefinedView && !refinedTranscript.isEmpty {
+                        // Display Refined Text Output View with option to revert
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("✨ AI Refined Output")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.purple)
+                                Spacer()
+                                Button("Show Original") {
+                                    showingRefinedView = false
+                                }
+                                .font(.caption)
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                            
+                            TextEditor(text: $refinedTranscript)
+                                .font(.body)
+                                .padding(.horizontal)
+                        }
+                    } else {
+                        // Original Transcript View
+                        TextEditor(text: $viewModel.transcript)
+                            .font(.body)
+                            .padding()
+                    }
+                    
                     if viewModel.isTranscribing {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
@@ -207,9 +270,10 @@ struct ContentView: View {
     }
     
     // MARK: - State Management Helper
-    // 🚨 Resets data layers clean so view configurations can toggle dynamic dashboard layout rules safely
     private func prepareForNewView() {
         viewModel.transcript = ""
+        refinedTranscript = ""
+        showingRefinedView = false
     }
     
     // MARK: - Dashboard Action Handler
@@ -243,7 +307,6 @@ struct ContentView: View {
                 Spacer()
                 
                 Button {
-                    // Clicking X cleanly resets the highlight state back to Home!
                     selectedTab = .newTranscription
                     prepareForNewView()
                 } label: {
@@ -257,7 +320,7 @@ struct ContentView: View {
             Divider()
             
             ScrollView {
-                Text(item.text)
+                Text(showingRefinedView ? refinedTranscript : item.text)
                     .font(.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

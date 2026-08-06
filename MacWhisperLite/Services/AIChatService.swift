@@ -1,14 +1,7 @@
-//
-//  AIChatService.swift
-//  MacWhisperLite
-//
-//  Created by ian kuo on 2026-08-05.
-//
-
-
 import Foundation
+internal import Combine
 #if canImport(FoundationModels)
-import FoundationModels // macOS 15+ / Apple Intelligence Frameworks
+import FoundationModels
 #endif
 
 @MainActor
@@ -22,44 +15,89 @@ class AIChatService: ObservableObject {
     1. Correct any obvious spelling, grammar, or speech-to-text typos.
     2. Format the text into natural, human-readable paragraphs.
     3. Fix missing or improper punctuation.
-    4. Remove unnecessary filler words (e.g., "um", "uh", "like", "you know", "like I said") while strictly preserving the original meaning and natural tone.
+    4. Remove unnecessary filler words (e.g., "um", "uh", "like", "you know") while strictly preserving the original meaning and natural tone.
     5. Do NOT summarize or omit important content. Output ONLY the refined transcript text.
     """
     
-    /// Process transcript text using local Apple Foundation Models
+    /// Entry point: Processes raw text by breaking it into ~500-word segments and refining each.
     func processTranscript(_ rawText: String) async -> String {
-        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
+        let trimmedInput = rawText.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else { return "" }
         
         isProcessing = true
         defer { isProcessing = false }
         
+        // 1. Break text into ~500-word segments
+        let segments = segmentInto500Words(trimmedInput)
+        var processedSegments: [String] = []
+        
+        // 2. Process each segment
+        for segment in segments {
+            let processed = await processSingleSegment(segment)
+            if !processed.isEmpty {
+                processedSegments.append(processed)
+            }
+        }
+        
+        // 3. Combine processed segments with double newline spacing
+        return processedSegments.joined(separator: "\n\n")
+    }
+    
+    /// Internal helper to refine a single text segment using Apple Foundation Models or local rules.
+    private func processSingleSegment(_ segmentText: String) async -> String {
         let prompt = """
         \(systemPrompt)
         
         Raw Transcript:
-        "\(rawText)"
+        "\(segmentText)"
         
         Refined Transcript:
         """
         
-        // Approach A: macOS 15+ Native Foundation Model API (Apple Intelligence)
+        // Approach A: Native Apple Foundation Models API (Apple Intelligence)
+        #if canImport(FoundationModels)
         if #available(macOS 15.0, iOS 18.0, *) {
             do {
-                // Initialize the local System Language Model Session
-                let session = try await SystemLanguageModel.Session()
-                let response = try await session.generateResponse(for: prompt)
-                return response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let session = LanguageModelSession()
+                let response = try await session.respond(to: prompt)
+                return response.content.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             } catch {
                 print("Apple Foundation Model generation failed: \(error.localizedDescription)")
                 self.errorMessage = "Local AI generation failed: \(error.localizedDescription)"
             }
         }
+        #endif
         
-        // Approach B: Fallback heuristic cleanup if local Apple Intelligence is unavailable
-        return fallbackBasicCleanup(rawText)
+        // Approach B: Fallback basic rule-based cleanup
+        return fallbackBasicCleanup(segmentText)
     }
     
-    /// Fallback rule-based cleanup for older macOS systems or devices without Apple Intelligence
+    /// Helper: Segments text into blocks of roughly 500 words based on whitespace boundaries.
+    private func segmentInto500Words(_ text: String) -> [String] {
+        let words = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        guard !words.isEmpty else { return [] }
+        
+        let targetWordCount = 500
+        var segments: [String] = []
+        var currentChunk: [String] = []
+        
+        for word in words {
+            currentChunk.append(word)
+            if currentChunk.count >= targetWordCount {
+                segments.append(currentChunk.joined(separator: " "))
+                currentChunk.removeAll(keepingCapacity: true)
+            }
+        }
+        
+        // Append any remaining words in the final chunk
+        if !currentChunk.isEmpty {
+            segments.append(currentChunk.joined(separator: " "))
+        }
+        
+        return segments
+    }
+    
+    /// Fallback rule-based cleanup for devices without Apple Intelligence
     private func fallbackBasicCleanup(_ text: String) -> String {
         var cleaned = text
         
@@ -75,6 +113,6 @@ class AIChatService: ObservableObject {
         
         // Clean up redundant spaces left by removed filler words
         cleaned = cleaned.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
     }
 }
